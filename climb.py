@@ -9,8 +9,7 @@ from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timezone
-from email.utils import format_datetime
-from email.utils import make_msgid
+from email.utils import format_datetime, make_msgid, parseaddr
 import ssl as sslmod
 
 defcharset = "UTF-8"; defport = "587"; defport_nc = "25"; deftimeout = "60"
@@ -151,7 +150,9 @@ def ParseArgs(argf, ignore_attachment, warn_on_cli_password):
             if os.path.isdir(arg):
                 if not ignore_attachment:
                     for fn in os.listdir(arg):
-                        attachment_files.append(os.path.join(arg, fn))
+                        filepath = os.path.join(arg, fn)
+                        if os.path.isfile(filepath):
+                            attachment_files.append(filepath)
             else:
                 if not os.path.isfile(arg):
                     print("Attachment File \"" + arg + "\" does not exist.")
@@ -194,9 +195,33 @@ def ParseArgs(argf, ignore_attachment, warn_on_cli_password):
 def split_addrs(s):
     return [x.strip() for x in s.replace(";", ",").split(",") if x.strip()]
 
+def validate_email(addr):
+    """Validate email address format using parseaddr. Returns True if valid."""
+    _, email = parseaddr(addr)
+    if not email:
+        return False
+    if '@' not in email:
+        return False
+    local, domain = email.rsplit('@', 1)
+    if not local or not domain:
+        return False
+    if '.' not in domain:
+        return False
+    return True
+
+def validate_email_list(addrs, field_name):
+    """Validate a list of email addresses. Exits with error if any are invalid."""
+    for addr in addrs:
+        if not validate_email(addr):
+            print(f"Invalid email address in {field_name}: '{addr}'", file=sys.stderr)
+            sys.exit(1)
+
 #--------------------
 #------ main() ------
 #--------------------
+if __name__ != "__main__":                                                                                             
+      raise ImportError("climb.py is a standalone script and should not be imported")
+
 if len(sys.argv) == 1:
     Usage()
 
@@ -207,6 +232,9 @@ if options_file != "":
     except OSError as exc:
         print(f"Failed to stat options file '{options_file}': {exc}", file=sys.stderr)
         sys.exit(1)
+    # 0o077 masks group (rwx=070) and other (rwx=007) permission bits;
+    # if any are set, the file is accessible to users other than the owner,
+    # which is a security risk since options file may contain passwords
     if st.st_mode & 0o077:
         print(f"Options file '{options_file}' must not be group/world-readable.", file=sys.stderr)
         sys.exit(1)
@@ -309,18 +337,24 @@ if receipt:
     msg["Disposition-Notification-To"] = sender_email #alternative "Return-Receipt-To" is non-standard
 
 recipients_list = split_addrs(recipients_emails)
+if not validate_email(sender_email):                                                                                   
+    print(f"Invalid sender email address: '{sender_email}'", file=sys.stderr)                                          
+    sys.exit(1)
+validate_email_list(recipients_list, "To")
 msg["To"] = ", ".join(recipients_list)
 email_list = list(recipients_list)
 
 if cc_emails != "":
     cc_list = split_addrs(cc_emails)
     if cc_list:
+        validate_email_list(cc_list, "CC")
         msg["CC"] = ", ".join(cc_list)
         email_list += cc_list
             
 if bcc_emails != "":
     bcc_list = split_addrs(bcc_emails)
     if bcc_list:
+        validate_email_list(bcc_list, "BCC")
         # Do not write BCC into the header
         email_list += bcc_list
 
@@ -399,12 +433,15 @@ else:
             s.starttls(context=tls_ctx)
             s.sock.settimeout(timeout_secs)
         s.login(login, password)
-        s.sendmail(msg["From"], email_list, msg.as_string())
+        s.sendmail(msg["From"], email_list, msg.as_bytes())
     except (smtplib.SMTPException, OSError, ValueError) as exc:
         print(f"Failed to send mail: {exc}", file=sys.stderr)
         exitlevel = 1
     finally:
-        s.quit()
+        try:
+            s.quit()
+        except (smtplib.SMTPException, OSError):
+            pass
         
     if copy_email != "":
         if verbose:
@@ -430,7 +467,8 @@ else:
             finally:
                 try:
                     i.logout()
-                except (imaplib.IMAP4.error, OSError, ValueError):
-                    pass
+                except (imaplib.IMAP4.error, OSError, ValueError) as exc:
+                    if verbose:
+                        print(f"Warning: IMAP logout failed: {exc}", file=sys.stderr)
 
 sys.exit(exitlevel)
