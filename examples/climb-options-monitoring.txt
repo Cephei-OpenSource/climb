@@ -1,0 +1,59 @@
+# =============================================================================
+# climb - Server Monitoring Configuration
+# =============================================================================
+# Optimized for automated server monitoring and alerting
+# 
+# Permissions: chmod 600 climb-options-monitoring.txt
+# Usage: climb -of climb-options-monitoring.txt -tt "Alert Title" -b "Alert Message"
+# =============================================================================
+
+# SMTP Server
+-server smtp.example.com
+-port 587               # Use 587 for STARTTLS, 465 for SSL, or 25 for unencrypted
+-timeout 30             # Fast failure for monitoring
+
+# Authentication
+-user monitoring@example.com
+-password MonitoringAccountPassword
+# RECOMMENDED: Use CLIMB_PASSWORD environment variable instead
+# Set in /etc/environment: CLIMB_PASSWORD="your_password"
+# Or in systemd service: Environment="CLIMB_PASSWORD=your_password"
+
+# Default Recipients (override with -t on command line if needed)
+-to sysadmin@example.com
+-bcc monitoring-archive@example.com
+
+# Character set
+-charset UTF-8
+
+# Archive sent alerts (optional - non-fatal if fails)
+-copy "Sent/Alerts"
+
+# =============================================================================
+# USAGE EXAMPLES:
+# =============================================================================
+#
+# Example 1: Disk space alert
+# climb -of climb-options-monitoring.txt \
+#   -tt "Disk Space Critical on $(hostname)" \
+#   -b "Root filesystem is at 95% capacity" \
+#   -a /tmp/df-output.txt
+#
+# Example 2: Service down alert
+# climb -of climb-options-monitoring.txt \
+#   -tt "Service Alert: Apache Down" \
+#   -b "Apache service stopped at $(date)" \
+#   -a /var/log/apache2/error.log
+#
+# Example 3: Use with environment variable for password
+# export CLIMB_PASSWORD="secure_password"
+# climb -of climb-options-monitoring.txt \
+#   -tt "Memory Usage High" \
+#   -bf /tmp/memory-report.txt
+#
+# Example 4: Test configuration without sending
+# climb -of climb-options-monitoring.txt \
+#   -output /dev/null \
+#   -tt "Test" \
+#   -b "Testing SMTP authentication"
+#

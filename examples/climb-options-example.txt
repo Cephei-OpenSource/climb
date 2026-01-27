@@ -1,0 +1,92 @@
+# =============================================================================
+# climb - Options File Template
+# =============================================================================
+# 
+# This file contains all available options for the climb email utility.
+# Lines starting with # are comments and will be ignored.
+# 
+# SECURITY NOTE: This file must have permissions 0600 (user read/write only)
+# Run: chmod 600 climb-options-example.txt
+# 
+# Usage: climb -of climb-options-example.txt [additional CLI options]
+# CLI options override settings in this file.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# SMTP SERVER CONFIGURATION (Required)
+# -----------------------------------------------------------------------------
+-server smtp.example.com
+-port 587
+# -port 465               # Use 465 for SMTP_SSL (with -ssl option)
+# -port 25                # Use 25 for unencrypted (with -nocrypt option)
+
+# Network timeout in seconds (Default: 60)
+-timeout 60
+# -timeout 30             # Faster failure detection for monitoring
+
+# -----------------------------------------------------------------------------
+# AUTHENTICATION (Required)
+# -----------------------------------------------------------------------------
+-user admin@example.com
+-password YourSecurePasswordHere
+# ALTERNATIVE: Use environment variable instead
+# export CLIMB_PASSWORD="YourSecurePasswordHere"
+# Then omit -password from this file
+
+# -----------------------------------------------------------------------------
+# ENCRYPTION OPTIONS
+# -----------------------------------------------------------------------------
+# -ssl                    # Force SSL from start (for port 465)
+# -nocrypt                # Disable encryption (not recommended)
+
+# -----------------------------------------------------------------------------
+# SENDER INFORMATION
+# -----------------------------------------------------------------------------
+# -from sender@example.com   # Defaults to username if not set
+
+# -----------------------------------------------------------------------------
+# RECIPIENTS (Can override with CLI)
+# -----------------------------------------------------------------------------
+# -to recipient@example.com
+# -to "user1@example.com, user2@example.com"   # Multiple recipients
+# -cc manager@example.com
+# -bcc monitoring@example.com
+
+# -----------------------------------------------------------------------------
+# MESSAGE CONTENT (Typically set via CLI for monitoring)
+# -----------------------------------------------------------------------------
+# -title "Server Alert"
+# -body "Alert message text"
+# -bodyF /path/to/body.txt
+# -html "<html><body>HTML content</body></html>"
+# -htmlF /path/to/body.html
+
+# -----------------------------------------------------------------------------
+# ATTACHMENTS
+# -----------------------------------------------------------------------------
+# -attach /var/log/application.log
+# -attach /path/to/directory       # Attaches all files in directory
+# -attach /path/to/report.pdf
+
+# -----------------------------------------------------------------------------
+# CHARACTER SET
+# -----------------------------------------------------------------------------
+-charset UTF-8
+# -charset ISO-8859-1     # For legacy systems
+
+# -----------------------------------------------------------------------------
+# ADDITIONAL OPTIONS
+# -----------------------------------------------------------------------------
+# -receipt                # Request read receipt
+# -verbose                # Show debug output (useful for testing)
+
+# -----------------------------------------------------------------------------
+# IMAP COPY (Optional - for archiving sent mail)
+# -----------------------------------------------------------------------------
+# -copy "Sent"            # IMAP folder name (e.g., "Sent", "INBOX.Sent")
+# -imap imap.example.com  # IMAP server (defaults to SMTP server)
+
+# -----------------------------------------------------------------------------
+# OUTPUT TO FILE (Testing - instead of sending)
+# -----------------------------------------------------------------------------
+# -output /tmp/test-message.eml   # Save to file instead of sending

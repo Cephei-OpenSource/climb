@@ -1,0 +1,67 @@
+# =============================================================================
+# climb - Scheduled Reports Configuration
+# =============================================================================
+# For sending regular reports with attachments
+# 
+# Permissions: chmod 600 climb-options-reports.txt
+# Usage: climb -of climb-options-reports.txt -tt "Report Title" -bf report.txt
+# =============================================================================
+
+# SMTP Server
+-server smtp.example.com
+-port 587               # Use 587 for STARTTLS, 465 for SSL, or 25 for unencrypted
+-timeout 60
+
+# Authentication
+-user reports@example.com
+-password ReportsAccountPassword
+# RECOMMENDED: Use CLIMB_PASSWORD environment variable instead
+# Set in /etc/environment: CLIMB_PASSWORD="your_password"
+# Or in systemd service: Environment="CLIMB_PASSWORD=your_password"
+
+# Recipients
+-to manager@example.com
+-cc team@example.com
+
+# Character set
+-charset UTF-8
+
+# Archive sent reports
+-copy "Sent/Reports"
+-imap imap.example.com
+
+# =============================================================================
+# USAGE EXAMPLES:
+# =============================================================================
+#
+# Example 1: Daily text report
+# climb -of climb-options-reports.txt \
+#   -tt "Daily Server Report - $(date +%Y-%m-%d)" \
+#   -bf /tmp/daily-report.txt \
+#   -a /var/log/metrics.csv
+#
+# Example 2: HTML report with attachments
+# climb -of climb-options-reports.txt \
+#   -tt "Weekly Status Report" \
+#   -b "Please see the attached HTML report and data files." \
+#   -hf /tmp/weekly-report.html \
+#   -a /tmp/graphs/
+#
+# Example 3: Monthly report with multiple attachments
+# climb -of climb-options-reports.txt \
+#   -tt "Monthly Summary - $(date +%B %Y)" \
+#   -bf /tmp/summary.txt \
+#   -a /tmp/report.pdf \
+#   -a /tmp/data.xlsx \
+#   -a /tmp/charts.zip
+#
+# Example 4: Cron job for daily reports
+# Add to crontab: crontab -e
+# 0 8 * * * export CLIMB_PASSWORD="secure"; /path/to/climb -of /etc/climb/climb-options-reports.txt -tt "Daily Report" -bf /tmp/report.txt
+#
+# Example 5: Test configuration without sending
+# climb -of climb-options-reports.txt \
+#   -output /tmp/test-report.eml \
+#   -tt "Test Report" \
+#   -bf /tmp/test-content.txt
+#
