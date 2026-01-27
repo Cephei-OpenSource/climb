@@ -4,7 +4,6 @@ import smtplib, os, sys, shlex, mimetypes, time, imaplib
 from email.mime.text import MIMEText
 from email.header import Header
 from email import encoders
-from email.message import Message
 from email.mime.audio import MIMEAudio
 from email.mime.base import MIMEBase
 from email.mime.image import MIMEImage
@@ -14,12 +13,12 @@ from email.utils import format_datetime
 from email.utils import make_msgid
 import ssl as sslmod
 
-defcharset = "UTF-8"; defport = "587"; defport_nc = "25"; deftimeout = "60" # defcharset was "ISO-8859-1"
+defcharset = "UTF-8"; defport = "587"; defport_nc = "25"; deftimeout = "60"
 
-password = ""; smtp_host = ""; mail_subject = ""; character_set = defcharset; sender_email = ""; login = "";
-recipients_emails = ""; options_file = ""; verbose = False; cc_emails = ""; bcc_emails = "";
-attachment_files = []; port = defport; html_body = ""; mail_body = ""; output_file = ""; ssl = False;
-copy_email = ""; nocrypt = False; receipt = False; imap_host = ""; timeout = deftimeout;
+password = ""; smtp_host = ""; mail_subject = ""; character_set = defcharset; sender_email = ""; login = ""
+recipients_emails = ""; options_file = ""; verbose = False; cc_emails = ""; bcc_emails = ""
+attachment_files = []; port = defport; html_body = ""; mail_body = ""; output_file = ""; ssl = False
+copy_email = ""; nocrypt = False; receipt = False; imap_host = ""; timeout = deftimeout
 body_file = ""; html_file = ""
 
 def Usage():
