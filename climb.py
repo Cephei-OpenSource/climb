@@ -14,12 +14,13 @@ from email.utils import format_datetime
 from email.utils import make_msgid
 import ssl as sslmod
 
-defcharset = "UTF-8"; defport = "587"; defport_nc = "25" # defcharset war "ISO-8859-1"
+defcharset = "UTF-8"; defport = "587"; defport_nc = "25"; deftimeout = "60" # defcharset was "ISO-8859-1"
 
 password = ""; smtp_host = ""; mail_subject = ""; character_set = defcharset; sender_email = ""; login = "";
 recipients_emails = ""; options_file = ""; verbose = False; cc_emails = ""; bcc_emails = "";
 attachment_files = []; port = defport; html_body = ""; mail_body = ""; output_file = ""; ssl = False;
-copy_email = ""; nocrypt = False; receipt = False; imap_host = ""
+copy_email = ""; nocrypt = False; receipt = False; imap_host = ""; timeout = deftimeout;
+body_file = ""; html_file = ""
 
 def Usage():
     print("climb - Command Line Interface Mail Bot V1.0 by Michael Boehm, Cephei AG\n" \
@@ -28,10 +29,11 @@ def Usage():
         "Case-insensitive options, and [arguments] that follow them:\n" + \
         "-s  or -server   : SMTP [Server] to use\n" + \
         "-p  or -port     : Server [Port] (Default " + defport + " for encrypted connections)\n" + \
+        "-tm or -timeout  : Network timeout in seconds (Default " + deftimeout + ")\n" + \
         "-ss or -ssl      : Force SSL from beginning of connection (ignored if -nc)\n" + \
         "-nc or -nocrypt  : Unencrypted connection (don't use SSL; default port " + defport_nc + ")\n" + \
         "-u  or -user     : [Username] for login\n" + \
-        "-pw or -password : [Password] for login\n" + \
+        "-pw or -password : [Password] for login (use '-' for stdin or set CLIMB_PASSWORD)\n" + \
         "-f  or -from     : Sender [E-Mail] (defaults to login username)\n" + \
         "-t  or -to       : Recipients [E-Mails], comma-separated\n" + \
         "-c  or -cc       : CC: Recipients [E-Mails], comma-separated\n" + \
@@ -65,10 +67,10 @@ def CheckArg(argf, i):
     else:
         return argf[i+1]
     
-def ParseArgs(argf, ignore_attachment):
+def ParseArgs(argf, ignore_attachment, warn_on_cli_password):
     global password, smtp_host, mail_subject, mail_body, sender_email, login, port, recipients_emails, \
         options_file, verbose, cc_emails, bcc_emails, ssl, attachment_files, receipt, html_body, \
-        output_file, character_set, copy_email, nocrypt, imap_host
+        output_file, character_set, copy_email, nocrypt, imap_host, timeout, body_file, html_file
 
     i = 0
     while True:
@@ -86,7 +88,13 @@ def ParseArgs(argf, ignore_attachment):
             login = CheckArg(argf, i)
             i += 1
         elif opt == "-password" or opt == "-pw":
-            password = CheckArg(argf, i)
+            arg = CheckArg(argf, i)
+            if arg == "-":
+                password = sys.stdin.read().strip("\n")
+            else:
+                password = arg
+                if warn_on_cli_password and arg != "":
+                    print("Warning: passing passwords via CLI can expose secrets; prefer CLIMB_PASSWORD or stdin.", file=sys.stderr)
             i += 1
         elif opt == "-server" or opt == "-s":
             smtp_host = CheckArg(argf, i)
@@ -94,30 +102,35 @@ def ParseArgs(argf, ignore_attachment):
         elif opt == "-port" or opt == "-p":
             port = CheckArg(argf, i)
             i += 1
+        elif opt == "-timeout" or opt == "-tm":
+            timeout = CheckArg(argf, i)
+            i += 1
         elif opt == "-title" or opt == "-tt":
             mail_subject = CheckArg(argf, i)
             i += 1
         elif opt == "-body" or opt == "-b":
             mail_body = CheckArg(argf, i)
+            body_file = ""
             i += 1
         elif opt == "-bodyf" or opt == "-bf":
             arg = CheckArg(argf, i)
             if not os.path.isfile(arg):
                 print("Text Body File \"" + arg + "\" does not exist.")
                 sys.exit(1)
-            with open(arg, "r", encoding=character_set, errors="replace") as f:
-                mail_body = f.read()
+            body_file = arg
+            mail_body = ""
             i += 1
         elif opt == "-html" or opt == "-ht":
             html_body = CheckArg(argf, i)
+            html_file = ""
             i += 1
         elif opt == "-htmlf" or opt == "-hf":
             arg = CheckArg(argf, i)
             if not os.path.isfile(arg):
                 print("HTML Body File \"" + arg + "\" does not exist.")
                 sys.exit(1)
-            with open(arg, "r", encoding=character_set, errors="replace") as f:
-                html_body = f.read()
+            html_file = arg
+            html_body = ""
             i += 1
         elif opt == "-from" or opt == "-f":
             sender_email = CheckArg(argf, i)
@@ -188,15 +201,63 @@ def split_addrs(s):
 if len(sys.argv) == 1:
     Usage()
 
-ParseArgs(sys.argv, False)
+ParseArgs(sys.argv, False, True)
 if options_file != "":
-    f = open(options_file, "r")
-    opt = f.read()
-    f.close()
+    try:
+        st = os.stat(options_file)
+    except OSError as exc:
+        print(f"Failed to stat options file '{options_file}': {exc}", file=sys.stderr)
+        sys.exit(1)
+    if st.st_mode & 0o077:
+        print(f"Options file '{options_file}' must not be group/world-readable.", file=sys.stderr)
+        sys.exit(1)
+    try:
+        with open(options_file, "r") as f:
+            opt = f.read()
+    except OSError as exc:
+        print(f"Failed to read options file '{options_file}': {exc}", file=sys.stderr)
+        sys.exit(1)
     optv = shlex.split(opt)
     optv.insert(0, options_file)
-    ParseArgs(optv, False)
-    ParseArgs(sys.argv, True) #command-line args have higher prio
+    ParseArgs(optv, False, False)
+    ParseArgs(sys.argv, True, True) #command-line args have higher priority
+
+if password == "":
+    env_password = os.getenv("CLIMB_PASSWORD")
+    if env_password is not None:
+        password = env_password
+
+try:
+    port_num = int(port)
+    if not (1 <= port_num <= 65535):
+        raise ValueError(f"must be between 1 and 65535, got {port_num}")
+except ValueError as exc:
+    print(f"Invalid port '{port}': {exc}", file=sys.stderr)
+    sys.exit(1)
+
+try:
+    timeout_secs = int(timeout)
+    if timeout_secs <= 0:
+        raise ValueError(f"must be a positive integer in seconds, got {timeout_secs}")
+except ValueError as exc:
+    print(f"Invalid timeout '{timeout}': {exc}", file=sys.stderr)
+    sys.exit(1)
+
+if body_file != "":
+    try:
+        with open(body_file, "r", encoding=character_set, errors="replace") as f:
+            mail_body = f.read()
+    except OSError as exc:
+        print(f"Failed to read body file '{body_file}': {exc}", file=sys.stderr)
+        sys.exit(1)
+
+if html_file != "":
+    try:
+        with open(html_file, "r", encoding=character_set, errors="replace") as f:
+            html_body = f.read()
+    except OSError as exc:
+        print(f"Failed to read HTML file '{html_file}': {exc}", file=sys.stderr)
+        sys.exit(1)
 
 if sender_email == "":
     sender_email = login
@@ -221,7 +282,7 @@ if smtp_host == "" or login == "" or password == "" or mail_subject == "" or \
         print("Text mail body missing")
     if sender_email == "":
         print("From: E-Mail not set")
-    ExitWithHelp() #these arguments are least required
+    ExitWithHelp() #these arguments are minimally required
 
 if len(attachment_files) == 0:
     if html_body == "":
@@ -261,47 +322,54 @@ if cc_emails != "":
 if bcc_emails != "":
     bcc_list = split_addrs(bcc_emails)
     if bcc_list:
-        # BCC bewusst nicht in den Header schreiben
+        # Do not write BCC into the header
         email_list += bcc_list
 
 for i in range(0, len(attachment_files)):
     path = attachment_files[i]
-    basename = os.path.basename(path)
-    ext = os.path.splitext(basename)[1].lower()
+    try:
+        basename = os.path.basename(path)
+        ext = os.path.splitext(basename)[1].lower()
 
-    if ext == ".pdf":
-        with open(path, "rb") as f:
-            att = MIMEBase("application", "pdf")
-            att.set_payload(f.read())
-        encoders.encode_base64(att)
-        # RFC-2231: UTF-8-sicherer Dateiname
+        if ext == ".pdf":
+            with open(path, "rb") as f:
+                att = MIMEBase("application", "pdf")
+                att.set_payload(f.read())
+            encoders.encode_base64(att)
+            # RFC-2231: UTF-8-safe filename
+            att.add_header("Content-Disposition", "attachment", filename=("utf-8", "", basename))
+            msg.attach(att)
+            continue
+
+        ctype, encoding = mimetypes.guess_type(path)
+        if ctype is None or encoding is not None:
+            ctype = "application/octet-stream"
+        maintype, subtype = ctype.split("/", 1)
+
+        if maintype == "text":
+            with open(path, "r", encoding=character_set, errors="replace") as f:
+                att = MIMEText(f.read(), subtype, character_set)
+        elif maintype == "image":
+            with open(path, "rb") as f:
+                att = MIMEImage(f.read(), subtype)
+        elif maintype == "audio":
+            with open(path, "rb") as f:
+                att = MIMEAudio(f.read(), subtype)
+        else:
+            with open(path, "rb") as f:
+                att = MIMEBase(maintype, subtype)
+                att.set_payload(f.read())
+            encoders.encode_base64(att)
+
+        # For non-PDFs: set filename robustly
         att.add_header("Content-Disposition", "attachment", filename=("utf-8", "", basename))
         msg.attach(att)
-        continue
-
-    ctype, encoding = mimetypes.guess_type(path)
-    if ctype is None or encoding is not None:
-        ctype = "application/octet-stream"
-    maintype, subtype = ctype.split("/", 1)
-
-    if maintype == "text":
-        with open(path, "r", encoding=character_set, errors="replace") as f:
-            att = MIMEText(f.read(), subtype, character_set)
-    elif maintype == "image":
-        with open(path, "rb") as f:
-            att = MIMEImage(f.read(), subtype)
-    elif maintype == "audio":
-        with open(path, "rb") as f:
-            att = MIMEAudio(f.read(), subtype)
-    else:
-        with open(path, "rb") as f:
-            att = MIMEBase(maintype, subtype)
-            att.set_payload(f.read())
-        encoders.encode_base64(att)
-
-    # Auch bei Nicht-PDFs: Dateiname robust setzen
-    att.add_header("Content-Disposition", "attachment", filename=("utf-8", "", basename))
-    msg.attach(att)
+    except OSError as exc:
+        print(f"Failed to read attachment '{path}': {exc}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:
+        print(f"Failed to process attachment '{path}': {exc}", file=sys.stderr)
+        sys.exit(1)
     
 exitlevel = 0
     
@@ -309,17 +377,19 @@ if output_file != "":
     try:
         with open(output_file, "wb") as f:
             f.write(msg.as_bytes())
-    except:
+    except OSError as exc:
+        print(f"Failed to write output file '{output_file}': {exc}", file=sys.stderr)
         exitlevel = 1
 else:
     try:
         tls_ctx = sslmod.create_default_context()
         if ssl:
-            s = smtplib.SMTP_SSL(smtp_host, int(port), timeout=60, context=tls_ctx)
-            s.sock.settimeout(180)
+            s = smtplib.SMTP_SSL(smtp_host, port_num, timeout=timeout_secs, context=tls_ctx)
+            s.sock.settimeout(timeout_secs)
         else:
-            s = smtplib.SMTP(smtp_host, int(port), timeout=60)
-    except:
+            s = smtplib.SMTP(smtp_host, port_num, timeout=timeout_secs)
+    except (smtplib.SMTPException, OSError, ValueError) as exc:
+        print(f"Failed to connect to SMTP server '{smtp_host}:{port_num}': {exc}", file=sys.stderr)
         sys.exit(1)
 
     if verbose:
@@ -328,10 +398,11 @@ else:
     try:
         if not ssl and not nocrypt:
             s.starttls(context=tls_ctx)
-            s.sock.settimeout(180) 
+            s.sock.settimeout(timeout_secs)
         s.login(login, password)
         s.sendmail(msg["From"], email_list, msg.as_string())
-    except:
+    except (smtplib.SMTPException, OSError, ValueError) as exc:
+        print(f"Failed to send mail: {exc}", file=sys.stderr)
         exitlevel = 1
     finally:
         s.quit()
@@ -345,14 +416,22 @@ else:
                 i = imaplib.IMAP4(imap_host)
             else:
                 i = imaplib.IMAP4_SSL(imap_host)
-        except:
-            sys.exit(1)
+            if i.sock is not None:
+                i.sock.settimeout(timeout_secs)
+        except (imaplib.IMAP4.error, OSError, ValueError) as exc:
+            print(f"Warning: failed to connect to IMAP server '{imap_host}': {exc}", file=sys.stderr)
+            i = None
 
-        try:
-            i.login(login, password)
-            i.append(copy_email, "\\Seen", imaplib.Time2Internaldate(time.time()), msg.as_bytes())
-            i.logout()
-        except:
-            exitlevel = 1
+        if i is not None:
+            try:
+                i.login(login, password)
+                i.append(copy_email, "\\Seen", imaplib.Time2Internaldate(time.time()), msg.as_bytes())
+            except (imaplib.IMAP4.error, OSError, ValueError) as exc:
+                print(f"Warning: failed to store copy in IMAP folder '{copy_email}': {exc}", file=sys.stderr)
+            finally:
+                try:
+                    i.logout()
+                except (imaplib.IMAP4.error, OSError, ValueError):
+                    pass
 
 sys.exit(exitlevel)
