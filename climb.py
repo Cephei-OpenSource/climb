@@ -31,7 +31,7 @@ def Usage():
         "-ss or -ssl      : Force SSL from beginning of connection (ignored if -nc)\n" + \
         "-nc or -nocrypt  : Unencrypted connection (don't use SSL; default port " + defport_nc + ")\n" + \
         "-u  or -user     : [Username] for login\n" + \
-        "-pw or -password : [Password] for login (use '-' for stdin or set CLIMB_PASSWORD)\n" + \
+        "-pw or -password : [Password] for login ('-' for stdin or set CLIMB_PASSWORD)\n" + \
         "-f  or -from     : Sender [E-Mail] (defaults to login username)\n" + \
         "-t  or -to       : Recipients [E-Mails], comma-separated\n" + \
         "-c  or -cc       : CC: Recipients [E-Mails], comma-separated\n" + \
@@ -48,7 +48,7 @@ def Usage():
         "-i  or -imap     : IMAP4 [Server] to use (only relevant with -cp; default SMTP)\n" + \
         "-o  or -output   : Instead of sending mail, create [File] containing mail\n" + \
         "-v  or -verbose  : Give status info while sending\n" + \
-        "-of or -optionsF : [File] to read options from (CLI opts higher prio!)\n" + \
+        "-of or -optionsF : [File] to read options from (CLI options higher prio!)\n" + \
         "-h  or -help     : Help (this usage)")
     sys.exit(1)
     
@@ -433,7 +433,8 @@ else:
             s.starttls(context=tls_ctx)
             s.sock.settimeout(timeout_secs)
         s.login(login, password)
-        s.sendmail(msg["From"], email_list, msg.as_bytes())
+        # Use string serialization to match prior behavior and avoid SMTPUTF8 edge cases
+        s.sendmail(msg["From"], email_list, msg.as_string())
     except (smtplib.SMTPException, OSError, ValueError) as exc:
         print(f"Failed to send mail: {exc}", file=sys.stderr)
         exitlevel = 1
