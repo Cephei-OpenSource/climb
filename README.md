@@ -7,7 +7,7 @@ A Python CLI utility for sending automated emails with full encryption support.
 - SMTP email sending with TLS/SSL encryption
 - Plain text and HTML email bodies
 - Multiple recipients (To, CC, BCC)
-- File attachments (single files or entire directories)
+- File attachments (single files or entire directories; directory attachments are non-recursive)
 - IMAP support for saving sent mail copies
 - Read receipt requests
 - Options file support for batch/automated sending
@@ -57,9 +57,9 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | `-tt` | `-title` | Mail subject |
 | `-b` | `-body` | Plain text message body |
 | `-bf` | `-bodyF` | File to read plain text body from |
-| `-ht` | `-html` | HTML message body |
-| `-hf` | `-htmlF` | File to read HTML body from |
-| `-a` | `-attach` | Attachment file or directory (repeatable) |
+| `-ht` | `-html` | HTML message body (requires a plain text body too) |
+| `-hf` | `-htmlF` | File to read HTML body from (requires a plain text body too) |
+| `-a` | `-attach` | Attachment file or directory (repeatable, directories are non-recursive) |
 | `-ch` | `-charset` | Character set for text (default: UTF-8) |
 | `-r` | `-receipt` | Request a read receipt |
 | `-cp` | `-copy` | Save copy to IMAP folder |
@@ -111,6 +111,9 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
     -ht "<html><body><h1>Report</h1><p>Please see the attached report.</p></body></html>" \
     -a report.pdf
 ```
+Note: HTML-only emails are not supported; a plain-text body is always required for compatibility.
+
+Note: Attaching a directory only includes the files in that directory (no nested subdirectories). For complex folder structures, zip them first.
 
 ### Send to multiple recipients with CC
 
