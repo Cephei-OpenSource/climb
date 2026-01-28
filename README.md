@@ -49,7 +49,7 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | `-ss` | `-ssl` | Force SSL from beginning of connection |
 | `-nc` | `-nocrypt` | Unencrypted connection (no SSL/TLS) |
 | `-u` | `-user` | Username for login |
-| `-pw` | `-password` | Password for login (use `-` for stdin) |
+| `-pw` | `-password` | Password for login (use `-` for stdin or set `CLIMB_PASSWORD`) |
 | `-f` | `-from` | Sender email (defaults to login username) |
 | `-t` | `-to` | Recipients (comma-separated) |
 | `-c` | `-cc` | CC recipients (comma-separated) |
@@ -62,11 +62,11 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | `-a` | `-attach` | Attachment file or directory (repeatable, directories are non-recursive) |
 | `-ch` | `-charset` | Character set for text (default: UTF-8) |
 | `-r` | `-receipt` | Request a read receipt |
-| `-cp` | `-copy` | Save copy to IMAP folder |
-| `-i` | `-imap` | IMAP server (defaults to SMTP server) |
+| `-cp` | `-copy` | Save copy to IMAP folder (ignored if `-o` is set) |
+| `-i` | `-imap` | IMAP server (only relevant with `-cp`; defaults to SMTP server) |
 | `-o` | `-output` | Testing mode: build and validate the email normally, but write it to file instead of sending |
 | `-v` | `-verbose` | Show status info while sending |
-| `-of` | `-optionsF` | File to read options from |
+| `-of` | `-optionsF` | File to read options from (CLI options higher prio!) |
 | `-h` | `-help` | Show help |
 
 ## Password Handling
