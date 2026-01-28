@@ -64,7 +64,7 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | `-r` | `-receipt` | Request a read receipt |
 | `-cp` | `-copy` | Save copy to IMAP folder |
 | `-i` | `-imap` | IMAP server (defaults to SMTP server) |
-| `-o` | `-output` | Write email to file instead of sending |
+| `-o` | `-output` | Testing mode: build and validate the email normally, but write it to file instead of sending |
 | `-v` | `-verbose` | Show status info while sending |
 | `-of` | `-optionsF` | File to read options from |
 | `-h` | `-help` | Show help |
@@ -138,7 +138,7 @@ chmod 600 mail-options.txt
 climb.py -of mail-options.txt -t admin@example.com -tt "Alert" -b "System alert message"
 ```
 
-### Save email to file without sending
+### Save email to file without sending (testing mode)
 
 ```bash
 climb.py -s smtp.example.com -u user@example.com -pw dummy \
@@ -147,6 +147,8 @@ climb.py -s smtp.example.com -u user@example.com -pw dummy \
     -b "Test body" \
     -o email.eml
 ```
+
+Note: `-o` still requires full credentials and performs normal validation so you can inspect the exact message that would be sent.
 
 ### Store copy in IMAP Sent folder
 
@@ -178,4 +180,4 @@ Freeware - Created by Michael Boehm, Cephei AG
 
 ## Version
 
-1.0
+1.1

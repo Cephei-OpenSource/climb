@@ -21,7 +21,7 @@ copy_email = ""; nocrypt = False; receipt = False; imap_host = ""; timeout = def
 body_file = ""; html_file = ""
 
 def Usage():
-    print("climb - Command Line Interface Mail Bot V1.0 by Michael Boehm, Cephei AG\n" \
+    print("climb - Command Line Interface Mail Bot V1.1 by Michael Boehm, Cephei AG\n" \
         "Utility to send automated E-Mails with full encryption support - Freeware\n" \
         "Usage: climb [options]\n" + \
         "Case-insensitive options, and [arguments] that follow them:\n" + \
