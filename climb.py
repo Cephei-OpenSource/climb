@@ -16,7 +16,7 @@ defcharset = "UTF-8"; defport = "587"; defport_nc = "25"; deftimeout = "60"
 
 password = ""; smtp_host = ""; mail_subject = ""; character_set = defcharset; sender_email = ""; login = ""
 recipients_emails = ""; options_file = ""; verbose = False; cc_emails = ""; bcc_emails = ""
-attachment_files = []; port = defport; html_body = ""; mail_body = ""; output_file = ""; ssl = False
+attachment_files = []; port = defport; html_body = ""; mail_body = ""; output_file = ""; use_ssl = False
 copy_email = ""; nocrypt = False; receipt = False; imap_host = ""; timeout = deftimeout
 body_file = ""; html_file = ""
 
@@ -67,7 +67,7 @@ def CheckArg(argf, i):
     
 def ParseArgs(argf, ignore_attachment, warn_on_cli_password):
     global password, smtp_host, mail_subject, mail_body, sender_email, login, port, recipients_emails, \
-        options_file, verbose, cc_emails, bcc_emails, ssl, attachment_files, receipt, html_body, \
+        options_file, verbose, cc_emails, bcc_emails, use_ssl, attachment_files, receipt, html_body, \
         output_file, character_set, copy_email, nocrypt, imap_host, timeout, body_file, html_file
 
     i = 0
@@ -174,7 +174,7 @@ def ParseArgs(argf, ignore_attachment, warn_on_cli_password):
             copy_email = CheckArg(argf, i)
             i += 1
         elif opt == "-ssl" or opt == "-ss":
-            ssl = True
+            use_ssl = True
         elif opt == "-receipt" or opt == "-r":
             receipt = True
         elif opt == "-nocrypt" or opt == "-nc":
@@ -288,8 +288,8 @@ if html_file != "":
 
 if sender_email == "":
     sender_email = login
-if nocrypt and ssl:
-    ssl = False
+if nocrypt and use_ssl:
+    use_ssl = False
 if copy_email and imap_host == "":
     imap_host = smtp_host
 
@@ -416,7 +416,7 @@ if output_file != "":
 else:
     try:
         tls_ctx = sslmod.create_default_context()
-        if ssl:
+        if use_ssl:
             s = smtplib.SMTP_SSL(smtp_host, port_num, timeout=timeout_secs, context=tls_ctx)
             s.sock.settimeout(timeout_secs)
         else:
@@ -429,7 +429,7 @@ else:
         s.set_debuglevel(1)
 
     try:
-        if not ssl and not nocrypt:
+        if not use_ssl and not nocrypt:
             s.starttls(context=tls_ctx)
             s.sock.settimeout(timeout_secs)
         s.login(login, password)
