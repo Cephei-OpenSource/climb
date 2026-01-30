@@ -32,7 +32,8 @@ DEFAULT_CHARSET = "UTF-8"
 DEFAULT_PORT_TLS = 587
 DEFAULT_PORT_NOCRYPT = 25
 DEFAULT_TIMEOUT = 60
-VERSION = "1.1"
+MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024  # 50 MB
+VERSION = "1.2"
 
 
 @dataclass
@@ -372,23 +373,26 @@ def load_config(args: List[str]) -> MailConfig:
         options_file = cli_dict["options_file"]
         
         # Check file permissions (must be owner-readable only)
+        # Open first, then fstat to avoid TOCTOU race condition
         try:
-            st = os.stat(options_file)
+            fd = os.open(options_file, os.O_RDONLY)
         except OSError as exc:
-            print(f"Failed to stat options file '{options_file}': {exc}", file=sys.stderr)
+            print(f"Failed to open options file '{options_file}': {exc}", file=sys.stderr)
             sys.exit(1)
         
-        if st.st_mode & 0o077:
-            print(f"Options file '{options_file}' must not be group/world-readable.", file=sys.stderr)
-            sys.exit(1)
-        
-        # Read and parse options file
         try:
-            with open(options_file, "r", encoding="utf-8") as f:
-                opts_content = f.read()
+            st = os.fstat(fd)
+            if st.st_mode & 0o077:
+                print(f"Options file '{options_file}' must not be group/world-readable.", file=sys.stderr)
+                sys.exit(1)
+            
+            # Read from file descriptor
+            opts_content = os.read(fd, os.stat(fd).st_size).decode("utf-8")
         except OSError as exc:
             print(f"Failed to read options file '{options_file}': {exc}", file=sys.stderr)
             sys.exit(1)
+        finally:
+            os.close(fd)
         
         opts_args = shlex.split(opts_content)
         
@@ -533,6 +537,17 @@ def create_email_message(config: MailConfig) -> Tuple[MIMEBase, List[str]]:
 
 def attach_file(msg: MIMEMultipart, path: str, charset: str) -> None:
     """Attach a file to the message."""
+    # Check file size limit
+    try:
+        file_size = os.path.getsize(path)
+    except OSError as exc:
+        print(f"Failed to stat attachment '{path}': {exc}", file=sys.stderr)
+        sys.exit(1)
+    
+    if file_size > MAX_ATTACHMENT_SIZE:
+        print(f"Attachment '{path}' exceeds maximum size of {MAX_ATTACHMENT_SIZE // 1024 // 1024} MB.", file=sys.stderr)
+        sys.exit(1)
+    
     try:
         basename = os.path.basename(path)
         ext = os.path.splitext(basename)[1].lower()
