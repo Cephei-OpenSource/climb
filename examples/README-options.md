@@ -354,6 +354,8 @@ This directory contains the following example files:
 | -to | -t | Recipients | `-t "user1@example.com, user2@example.com"` |
 | -cc | -c | CC recipients | `-c manager@example.com` |
 | -bcc | -bc | BCC recipients | `-bc archive@example.com` |
+
+**Note:** Multiple recipients can be separated by commas (`,`) or semicolons (`;`)
 | -title | -tt | Subject | `-tt "Alert Message"` |
 | -body | -b | Message body | `-b "Alert text"` |
 | -bodyF | -bf | Body from file | `-bf /path/to/body.txt` |

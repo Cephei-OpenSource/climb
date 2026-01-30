@@ -15,7 +15,7 @@ A Python CLI utility for sending automated emails with full encryption support.
 
 ## Requirements
 
-- Python 3.x
+- Python 3.7+ (for dataclass support)
 - No external dependencies (uses standard library only)
 
 ## Installation
@@ -51,9 +51,9 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | `-u` | `-user` | Username for login |
 | `-pw` | `-password` | Password for login (use `-` for stdin or set `CLIMB_PASSWORD`) |
 | `-f` | `-from` | Sender email (defaults to login username) |
-| `-t` | `-to` | Recipients (comma-separated) |
-| `-c` | `-cc` | CC recipients (comma-separated) |
-| `-bc` | `-bcc` | BCC recipients (comma-separated) |
+| `-t` | `-to` | Recipients (comma or semicolon separated) |
+| `-c` | `-cc` | CC recipients (comma or semicolon separated) |
+| `-bc` | `-bcc` | BCC recipients (comma or semicolon separated) |
 | `-tt` | `-title` | Mail subject |
 | `-b` | `-body` | Plain text message body |
 | `-bf` | `-bodyF` | File to read plain text body from |
