@@ -169,6 +169,7 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 - Passwords passed via CLI will trigger a warning
 - Use TLS/SSL encryption (default) unless connecting to a local relay
 - BCC recipients are not written to email headers
+- Email validation requires a dot in the domain, except for `@localhost` which is allowed for local/dev SMTP setups
 
 ## Exit Codes
 
