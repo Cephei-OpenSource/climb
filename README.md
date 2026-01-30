@@ -184,4 +184,4 @@ Freeware - Created by Michael Boehm, Cephei AG
 
 ## Version
 
-1.1
+1.2
