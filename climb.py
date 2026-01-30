@@ -144,6 +144,13 @@ class MailConfig:
         if not validate_email(self.sender_email):
             print(f"Invalid sender email address: '{self.sender_email}'", file=sys.stderr)
             sys.exit(1)
+        
+        # Validate recipient email formats (fail fast)
+        recipients_list = split_addrs(self.recipients_emails)
+        if not recipients_list:
+            print("No valid mail-recipients given", file=sys.stderr)
+            sys.exit(1)
+        validate_email_list(recipients_list, "To")
 
 
 def usage() -> None:
@@ -431,7 +438,11 @@ def load_config(args: List[str]) -> MailConfig:
 
 def split_addrs(s: str) -> List[str]:
     """Split comma or semicolon separated address string into list."""
-    return [x.strip() for x in s.replace(";", ",").split(",") if x.strip()]
+    parts = [x.strip() for x in s.replace(";", ",").split(",")]
+    addrs = [x for x in parts if x]
+    if addrs and any(not x for x in parts):
+        print("Warning: empty email address entries were ignored", file=sys.stderr)
+    return addrs
 
 
 def validate_email(addr: str) -> bool:
