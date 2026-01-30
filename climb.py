@@ -183,10 +183,8 @@ def usage() -> None:
 
 
 def get_arg(args: List[str], index: int) -> str:
-    """Get argument at index+1, exit with error if missing."""
-    if index + 1 < len(args) and len(args[index + 1]) == 0:
-        return ""  # Command line argument may void argument in options file
-    if index + 1 >= len(args) or args[index + 1].startswith("-"):
+    """Get argument at index+1, exit with error if missing or empty."""
+    if index + 1 >= len(args) or args[index + 1].startswith("-") or len(args[index + 1]) == 0:
         print(f"Argument missing for \"{args[index].lower()}\"")
         print("Use climb -h for help")
         sys.exit(1)
@@ -197,6 +195,8 @@ def normalize_option(opt: str) -> str:
     """Normalize option string (handle -- and / prefixes)."""
     opt = opt.lower()
     # Double hyphen equals single hyphen for long form
+    # Long options: --ssl (5 chars) vs short: -ss (3 chars)
+    # Threshold 4 differentiates between short (-ss) and long (--ssl)
     if opt.startswith("--") and len(opt) > 4:
         opt = opt[1:]
     # For short form, '/' equals '-'
@@ -348,7 +348,7 @@ def merge_configs(base: MailConfig, override: MailConfig) -> MailConfig:
         elif key == "options_file":
             # options_file is metadata, don't carry over
             continue
-        elif value or (isinstance(value, bool) and value):
+        elif value:
             # For strings, non-empty overrides; for bools, True overrides
             base_dict[key] = value
     
@@ -377,14 +377,13 @@ def load_config(args: List[str]) -> MailConfig:
         
         # Read and parse options file
         try:
-            with open(options_file, "r") as f:
+            with open(options_file, "r", encoding="utf-8") as f:
                 opts_content = f.read()
         except OSError as exc:
             print(f"Failed to read options file '{options_file}': {exc}", file=sys.stderr)
             sys.exit(1)
         
         opts_args = shlex.split(opts_content)
-        opts_args.insert(0, options_file)  # Insert dummy program name
         
         # Parse options file (no password warning needed for file)
         file_dict, file_attachments = parse_args_to_dict(opts_args, warn_on_cli_password=False)
@@ -458,7 +457,7 @@ def validate_email_list(addrs: List[str], field_name: str) -> None:
             sys.exit(1)
 
 
-def create_email_message(config: MailConfig) -> Tuple[MIMEMultipart, List[str]]:
+def create_email_message(config: MailConfig) -> Tuple[MIMEBase, List[str]]:
     """
     Create email message from config.
     Returns (message, full_recipient_list).
@@ -483,7 +482,7 @@ def create_email_message(config: MailConfig) -> Tuple[MIMEMultipart, List[str]]:
             msg.attach(alt)
     
     # Set headers
-    msg["Date"] = format_datetime(datetime.now().astimezone())
+    msg["Date"] = format_datetime(datetime.now(timezone.utc).astimezone())
     msg["Message-ID"] = make_msgid()
     msg["Subject"] = Header(config.mail_subject, config.character_set)
     msg["From"] = config.sender_email
@@ -568,7 +567,7 @@ def attach_file(msg: MIMEMultipart, path: str, charset: str) -> None:
         sys.exit(1)
 
 
-def send_smtp(config: MailConfig, msg: MIMEMultipart, recipients: List[str]) -> bool:
+def send_smtp(config: MailConfig, msg: MIMEBase, recipients: List[str]) -> bool:
     """
     Send email via SMTP.
     Returns True on success, False on failure.
@@ -599,7 +598,9 @@ def send_smtp(config: MailConfig, msg: MIMEMultipart, recipients: List[str]) -> 
             server.set_debuglevel(1)
         
         if not config.use_ssl and not config.nocrypt:
+            server.ehlo()
             server.starttls(context=tls_ctx)
+            server.ehlo()
             server.sock.settimeout(config.timeout)
         
         server.login(config.login, config.password)
@@ -616,7 +617,7 @@ def send_smtp(config: MailConfig, msg: MIMEMultipart, recipients: List[str]) -> 
             pass
 
 
-def save_imap_copy(config: MailConfig, msg: MIMEMultipart) -> None:
+def save_imap_copy(config: MailConfig, msg: MIMEBase) -> None:
     """Save a copy of the message to IMAP folder."""
     if not config.copy_email:
         return
@@ -654,7 +655,7 @@ def save_imap_copy(config: MailConfig, msg: MIMEMultipart) -> None:
                 print(f"Warning: IMAP logout failed: {exc}", file=sys.stderr)
 
 
-def write_output_file(config: MailConfig, msg: MIMEMultipart) -> bool:
+def write_output_file(config: MailConfig, msg: MIMEBase) -> bool:
     """Write message to output file instead of sending."""
     try:
         with open(config.output_file, "wb") as f:
@@ -671,10 +672,18 @@ def main() -> int:
         usage()
     
     # Load configuration from arguments
-    config = load_config(sys.argv)
+    config = load_config(sys.argv[1:])
     
     # Validate configuration
     config.validate()
+    
+    # Warn about unencrypted connection with password
+    if config.nocrypt and config.password:
+        print(
+            "Warning: Password will be transmitted unencrypted (-nocrypt). "
+            "Consider using TLS/SSL for secure authentication.",
+            file=sys.stderr
+        )
     
     # Create email message
     msg, recipients = create_email_message(config)
