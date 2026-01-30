@@ -46,7 +46,7 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | `-s` | `-server` | SMTP server to use |
 | `-p` | `-port` | Server port (default: 587 for TLS, 25 for unencrypted) |
 | `-tm` | `-timeout` | Network timeout in seconds (default: 60) |
-| `-ss` | `-ssl` | Force SSL from beginning of connection |
+| `-ss` | `-ssl` | Force immediate SSL on connection (SMTPS/Port 465) - legacy option, rarely needed |
 | `-nc` | `-nocrypt` | Unencrypted connection (no SSL/TLS) |
 | `-u` | `-user` | Username for login |
 | `-pw` | `-password` | Password for login (use `-` for stdin or set `CLIMB_PASSWORD`) |
