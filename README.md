@@ -8,6 +8,7 @@ A Python CLI utility for sending automated emails with full encryption support.
 - Plain text and HTML email bodies
 - Multiple recipients (To, CC, BCC)
 - File attachments (single files or entire directories; directory attachments are non-recursive)
+- Inline image attachments for HTML email (CID references)
 - IMAP support for saving sent mail copies
 - Read receipt requests
 - Options file support for batch/automated sending
@@ -60,6 +61,8 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | `-ht` | `-html` | HTML message body (requires a plain text body too) |
 | `-hf` | `-htmlF` | File to read HTML body from (requires a plain text body too) |
 | `-a` | `-attach` | Attachment file or directory (repeatable, directories are non-recursive) |
+| `-ai`, `-al` | `-attach-inline` | Inline image attachment for HTML (requires `-cid`) |
+| `-cid`, `-ci` | `-content-id` | Content-ID for inline image (without `<>`, requires `-ai`/`-al`) |
 | `-ch` | `-charset` | Character set for text (default: UTF-8) |
 | `-r` | `-receipt` | Request a read receipt |
 | `-cp` | `-copy` | Save copy to IMAP folder (ignored if `-o` is set) |
@@ -114,6 +117,31 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 Note: HTML-only emails are not supported; a plain-text body is always required for compatibility.
 
 Note: Attaching a directory only includes the files in that directory (no nested subdirectories). For complex folder structures, zip them first.
+
+### Send HTML email with inline image (CID)
+
+```bash
+climb.py -s smtp.example.com -u user@example.com -pw - \
+    -t recipient@example.com \
+    -tt "Newsletter" \
+    -b "Your mail client does not support HTML." \
+    -ht "<html><body><h1>News</h1><img src=\"cid:newsletter-image-001\" alt=\"Newsletter Bild\"></body></html>" \
+    -ai /tmp/newsletter.jpg \
+    -cid newsletter-image-001
+```
+Note: The `-cid` value is provided without angle brackets; `climb` writes the header with `<...>` automatically.
+
+### MIME structure for HTML + inline images
+
+When you use `-ht` together with `-ai/-al` and `-cid`, `climb` builds a structure like:
+
+- `multipart/alternative` (main container)
+  - `text/plain` (fallback)
+  - `multipart/related` (HTML + inline images)
+    - `text/html`
+    - `image/*` with `Content-ID: <...>` and `Content-Disposition: inline`
+
+If you also add normal attachments (`-a`), `climb` wraps the message in an outer `multipart/mixed` container.
 
 ### Send to multiple recipients with CC
 
