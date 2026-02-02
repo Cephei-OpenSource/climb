@@ -65,6 +65,8 @@ class MailConfig:
     body_file: str = ""
     html_file: str = ""
     attachment_files: List[str] = field(default_factory=list)
+    inline_attachment_file: str = ""
+    content_id: str = ""
     
     # Options File
     options_file: str = ""
@@ -124,6 +126,15 @@ class MailConfig:
             errors.append("Text mail body missing")
         if not self.sender_email:
             errors.append("From: E-Mail not set")
+
+        if self.inline_attachment_file and not self.content_id:
+            errors.append("Inline attachment requires Content-ID (-cid)")
+        if self.content_id and not self.inline_attachment_file:
+            errors.append("Content-ID (-cid) requires inline attachment (-ai)")
+        if self.content_id and ("<" in self.content_id or ">" in self.content_id):
+            errors.append("Content-ID must be provided without <>")
+        if self.inline_attachment_file and not self.html_body:
+            errors.append("Inline attachment requires HTML body (-ht/-hf)")
         
         if errors:
             for err in errors:
@@ -178,6 +189,8 @@ def usage() -> None:
         "-ht or -html     : Mail [HTML] (Message HTML - use quotes for whitespace)\n"
         "-hf or -htmlF    : [File] to read Mail HTML Body from\n"
         "-a  or -attach   : Attachment [File or Dir] (Use repeatedly to add more)\n"
+        "-ai or -al or -attach-inline : Inline image [File] (requires -cid)\n"
+        "-cid or -ci or -content-id : Content-ID for inline image (without <>)\n"
         f"-ch or -charset  : Use this [Charset] for text, default \"{DEFAULT_CHARSET}\"\n"
         "-r  or -receipt  : Request a return receipt\n"
         "-cp or -copy     : Place a copy of Mail into [IMAP Folder] (ignored if -o)\n"
@@ -304,6 +317,19 @@ def parse_args_to_dict(args: List[str], warn_on_cli_password: bool) -> Tuple[dic
                     print(f"Attachment File \"{path}\" does not exist.")
                     sys.exit(1)
                 attachments.append(path)
+            i += 1
+        elif opt in ("-attach-inline", "-ai", "-al"):
+            path = get_arg(args, i)
+            if config_dict.get("inline_attachment_file"):
+                print("Only one inline attachment is supported.")
+                sys.exit(1)
+            if not os.path.isfile(path):
+                print(f"Inline Attachment File \"{path}\" does not exist.")
+                sys.exit(1)
+            config_dict["inline_attachment_file"] = path
+            i += 1
+        elif opt in ("-cid", "-ci", "-content-id"):
+            config_dict["content_id"] = get_arg(args, i)
             i += 1
         elif opt in ("-optionsf", "-of"):
             path = get_arg(args, i)
@@ -480,23 +506,49 @@ def create_email_message(config: MailConfig) -> Tuple[MIMEBase, List[str]]:
     Returns (message, full_recipient_list).
     """
     # Build message structure
-    if not config.attachment_files:
-        if not config.html_body:
-            msg = MIMEText(config.mail_body, "plain", config.character_set)
+    has_inline = bool(config.inline_attachment_file)
+    has_html = bool(config.html_body)
+    has_attachments = bool(config.attachment_files)
+
+    if has_attachments:
+        msg = MIMEMultipart("mixed")
+        if has_html or has_inline:
+            alt = MIMEMultipart("alternative")
+            alt.attach(MIMEText(config.mail_body, "plain", config.character_set))
+            if has_inline:
+                related = MIMEMultipart("related")
+                related.attach(MIMEText(config.html_body, "html", config.character_set))
+                attach_inline_file(
+                    related,
+                    config.inline_attachment_file,
+                    config.character_set,
+                    config.content_id,
+                )
+                alt.attach(related)
+            else:
+                alt.attach(MIMEText(config.html_body, "html", config.character_set))
+            msg.attach(alt)
         else:
+            msg.attach(MIMEText(config.mail_body, "plain", config.character_set))
+    else:
+        if has_inline:
+            msg = MIMEMultipart("alternative")
+            msg.attach(MIMEText(config.mail_body, "plain", config.character_set))
+            related = MIMEMultipart("related")
+            related.attach(MIMEText(config.html_body, "html", config.character_set))
+            attach_inline_file(
+                related,
+                config.inline_attachment_file,
+                config.character_set,
+                config.content_id,
+            )
+            msg.attach(related)
+        elif has_html:
             msg = MIMEMultipart("alternative")
             msg.attach(MIMEText(config.mail_body, "plain", config.character_set))
             msg.attach(MIMEText(config.html_body, "html", config.character_set))
-    else:
-        msg = MIMEMultipart()
-        
-        if not config.html_body:
-            msg.attach(MIMEText(config.mail_body, "plain", config.character_set))
         else:
-            alt = MIMEMultipart("alternative")
-            alt.attach(MIMEText(config.mail_body, "plain", config.character_set))
-            alt.attach(MIMEText(config.html_body, "html", config.character_set))
-            msg.attach(alt)
+            msg = MIMEText(config.mail_body, "plain", config.character_set)
     
     # Set headers
     msg["Date"] = format_datetime(datetime.now(timezone.utc).astimezone())
@@ -592,6 +644,55 @@ def attach_file(msg: MIMEMultipart, path: str, charset: str) -> None:
         sys.exit(1)
     except Exception as exc:
         print(f"Failed to process attachment '{path}': {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+def attach_inline_file(msg: MIMEMultipart, path: str, charset: str, content_id: str) -> None:
+    """Attach a file as inline content with Content-ID."""
+    try:
+        file_size = os.path.getsize(path)
+    except OSError as exc:
+        print(f"Failed to stat inline attachment '{path}': {exc}", file=sys.stderr)
+        sys.exit(1)
+
+    if file_size > MAX_ATTACHMENT_SIZE:
+        print(
+            f"Inline attachment '{path}' exceeds maximum size of "
+            f"{MAX_ATTACHMENT_SIZE // 1024 // 1024} MB.",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    try:
+        basename = os.path.basename(path)
+        ctype, encoding = mimetypes.guess_type(path)
+        if ctype is None or encoding is not None:
+            ctype = "application/octet-stream"
+        maintype, subtype = ctype.split("/", 1)
+
+        if maintype == "image":
+            with open(path, "rb") as f:
+                att = MIMEImage(f.read(), subtype)
+        elif maintype == "text":
+            with open(path, "r", encoding=charset, errors="replace") as f:
+                att = MIMEText(f.read(), subtype, charset)
+        elif maintype == "audio":
+            with open(path, "rb") as f:
+                att = MIMEAudio(f.read(), subtype)
+        else:
+            with open(path, "rb") as f:
+                att = MIMEBase(maintype, subtype)
+                att.set_payload(f.read())
+            encoders.encode_base64(att)
+
+        att.add_header("Content-Disposition", "inline", filename=("utf-8", "", basename))
+        att.add_header("Content-ID", f"<{content_id}>")
+        msg.attach(att)
+    except OSError as exc:
+        print(f"Failed to read inline attachment '{path}': {exc}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:
+        print(f"Failed to process inline attachment '{path}': {exc}", file=sys.stderr)
         sys.exit(1)
 
 
