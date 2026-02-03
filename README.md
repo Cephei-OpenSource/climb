@@ -8,7 +8,7 @@ A Python CLI utility for sending automated emails with full encryption support.
 - Plain text and HTML email bodies
 - Multiple recipients (To, CC, BCC)
 - File attachments (single files or entire directories; directory attachments are non-recursive)
-- Inline image attachments for HTML email (CID references)
+- Inline image attachments for HTML email (CID references; supports multiple inline attachments)
 - IMAP support for saving sent mail copies
 - Read receipt requests
 - Options file support for batch/automated sending
@@ -61,8 +61,8 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | `-ht` | `-html` | HTML message body (requires a plain text body too) |
 | `-hf` | `-htmlF` | File to read HTML body from (requires a plain text body too) |
 | `-a` | `-attach` | Attachment file or directory (repeatable, directories are non-recursive) |
-| `-ai`, `-al` | `-attach-inline` | Inline image attachment for HTML (requires `-cid`) |
-| `-cid`, `-ci` | `-content-id` | Content-ID for inline image (without `<>`, requires `-ai`/`-al`) |
+| `-al` | `--attach-inline` | Inline image attachment for HTML (repeatable; requires matching `-ci`) |
+| `-ci` | `--content-id` | Content-ID for inline image (repeatable, without `<>`, requires `-al`) |
 | `-ch` | `-charset` | Character set for text (default: UTF-8) |
 | `-r` | `-receipt` | Request a read receipt |
 | `-cp` | `-copy` | Save copy to IMAP folder (ignored if `-o` is set) |
@@ -126,14 +126,28 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
     -tt "Newsletter" \
     -b "Your mail client does not support HTML." \
     -ht "<html><body><h1>News</h1><img src=\"cid:newsletter-image-001\" alt=\"Newsletter Bild\"></body></html>" \
-    -ai /tmp/newsletter.jpg \
-    -cid newsletter-image-001
+    -al /tmp/newsletter.jpg \
+    -ci newsletter-image-001
 ```
-Note: The `-cid` value is provided without angle brackets; `climb` writes the header with `<...>` automatically.
+Note: The `-ci` value is provided without angle brackets; `climb` writes the header with `<...>` automatically.
+
+### Send HTML email with multiple inline images
+
+Use multiple `-al` and `-ci` pairs. The order matters: the first `-al` maps to the first `-ci`, the second to the second, etc. If counts differ, `climb` exits with an error.
+
+```bash
+climb.py -s smtp.example.com -u user@example.com -pw - \
+    -t recipient@example.com \
+    -tt "Gallery" \
+    -b "Your mail client does not support HTML." \
+    -ht "<html><body><img src=\"cid:img-1\"><img src=\"cid:img-2\"></body></html>" \
+    -al /tmp/img1.jpg -ci img-1 \
+    -al /tmp/img2.jpg -ci img-2
+```
 
 ### MIME structure for HTML + inline images
 
-When you use `-ht` together with `-ai/-al` and `-cid`, `climb` builds a structure like:
+When you use `-ht` together with `-al` and `-ci`, `climb` builds a structure like:
 
 - `multipart/alternative` (main container)
   - `text/plain` (fallback)
@@ -206,10 +220,14 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | 0 | Success |
 | 1 | Error (missing arguments, connection failure, etc.) |
 
+## Changelog
+
+- 1.3: Added inline attachments for HTML emails (`-al` + matching `-ci`), including multiple inline attachments with order-based mapping (counts must match).
+
 ## License
 
 Freeware - Created by Michael Boehm, Cephei AG
 
 ## Version
 
-1.2
+1.3

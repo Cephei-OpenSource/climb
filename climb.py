@@ -33,7 +33,7 @@ DEFAULT_PORT_TLS = 587
 DEFAULT_PORT_NOCRYPT = 25
 DEFAULT_TIMEOUT = 60
 MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024  # 50 MB
-VERSION = "1.2"
+VERSION = "1.3"
 
 
 @dataclass
@@ -65,8 +65,8 @@ class MailConfig:
     body_file: str = ""
     html_file: str = ""
     attachment_files: List[str] = field(default_factory=list)
-    inline_attachment_file: str = ""
-    content_id: str = ""
+    inline_attachment_files: List[str] = field(default_factory=list)
+    content_ids: List[str] = field(default_factory=list)
     
     # Options File
     options_file: str = ""
@@ -127,13 +127,17 @@ class MailConfig:
         if not self.sender_email:
             errors.append("From: E-Mail not set")
 
-        if self.inline_attachment_file and not self.content_id:
-            errors.append("Inline attachment requires Content-ID (-cid)")
-        if self.content_id and not self.inline_attachment_file:
-            errors.append("Content-ID (-cid) requires inline attachment (-ai)")
-        if self.content_id and ("<" in self.content_id or ">" in self.content_id):
-            errors.append("Content-ID must be provided without <>")
-        if self.inline_attachment_file and not self.html_body:
+        if self.inline_attachment_files and not self.content_ids:
+            errors.append("Inline attachments require Content-ID (-ci)")
+        if self.content_ids and not self.inline_attachment_files:
+            errors.append("Content-ID (-ci) requires inline attachment (-al)")
+        if self.inline_attachment_files and len(self.inline_attachment_files) != len(self.content_ids):
+            errors.append("Number of inline attachments must match number of Content-IDs")
+        for content_id in self.content_ids:
+            if "<" in content_id or ">" in content_id:
+                errors.append("Content-ID must be provided without <>")
+                break
+        if self.inline_attachment_files and not self.html_body:
             errors.append("Inline attachment requires HTML body (-ht/-hf)")
         
         if errors:
@@ -189,8 +193,8 @@ def usage() -> None:
         "-ht or -html     : Mail [HTML] (Message HTML - use quotes for whitespace)\n"
         "-hf or -htmlF    : [File] to read Mail HTML Body from\n"
         "-a  or -attach   : Attachment [File or Dir] (Use repeatedly to add more)\n"
-        "-ai or -al or -attach-inline : Inline image [File] (requires -cid)\n"
-        "-cid or -ci or -content-id : Content-ID for inline image (without <>)\n"
+        "-al or --attach-inline : Inline image [File] (repeatable; requires matching -ci)\n"
+        "-ci or --content-id : Content-ID for inline image (repeatable; without <>)\n"
         f"-ch or -charset  : Use this [Charset] for text, default \"{DEFAULT_CHARSET}\"\n"
         "-r  or -receipt  : Request a return receipt\n"
         "-cp or -copy     : Place a copy of Mail into [IMAP Folder] (ignored if -o)\n"
@@ -318,18 +322,15 @@ def parse_args_to_dict(args: List[str], warn_on_cli_password: bool) -> Tuple[dic
                     sys.exit(1)
                 attachments.append(path)
             i += 1
-        elif opt in ("-attach-inline", "-ai", "-al"):
+        elif opt in ("-attach-inline", "-al"):
             path = get_arg(args, i)
-            if config_dict.get("inline_attachment_file"):
-                print("Only one inline attachment is supported.")
-                sys.exit(1)
             if not os.path.isfile(path):
                 print(f"Inline Attachment File \"{path}\" does not exist.")
                 sys.exit(1)
-            config_dict["inline_attachment_file"] = path
+            config_dict.setdefault("inline_attachment_files", []).append(path)
             i += 1
-        elif opt in ("-cid", "-ci", "-content-id"):
-            config_dict["content_id"] = get_arg(args, i)
+        elif opt in ("-ci", "-content-id"):
+            config_dict.setdefault("content_ids", []).append(get_arg(args, i))
             i += 1
         elif opt in ("-optionsf", "-of"):
             path = get_arg(args, i)
@@ -375,8 +376,8 @@ def merge_configs(base: MailConfig, override: MailConfig) -> MailConfig:
     
     # Fields that should override
     for key, value in override_dict.items():
-        if key == "attachment_files":
-            # Special handling: merge attachment lists
+        if key in ("attachment_files", "inline_attachment_files", "content_ids"):
+            # Special handling: merge file/content-id lists
             if value:
                 base_dict[key] = value
         elif key == "options_file":
@@ -506,7 +507,7 @@ def create_email_message(config: MailConfig) -> Tuple[MIMEBase, List[str]]:
     Returns (message, full_recipient_list).
     """
     # Build message structure
-    has_inline = bool(config.inline_attachment_file)
+    has_inline = bool(config.inline_attachment_files)
     has_html = bool(config.html_body)
     has_attachments = bool(config.attachment_files)
 
@@ -518,12 +519,13 @@ def create_email_message(config: MailConfig) -> Tuple[MIMEBase, List[str]]:
             if has_inline:
                 related = MIMEMultipart("related")
                 related.attach(MIMEText(config.html_body, "html", config.character_set))
-                attach_inline_file(
-                    related,
-                    config.inline_attachment_file,
-                    config.character_set,
-                    config.content_id,
-                )
+                for path, content_id in zip(config.inline_attachment_files, config.content_ids):
+                    attach_inline_file(
+                        related,
+                        path,
+                        config.character_set,
+                        content_id,
+                    )
                 alt.attach(related)
             else:
                 alt.attach(MIMEText(config.html_body, "html", config.character_set))
@@ -536,12 +538,13 @@ def create_email_message(config: MailConfig) -> Tuple[MIMEBase, List[str]]:
             msg.attach(MIMEText(config.mail_body, "plain", config.character_set))
             related = MIMEMultipart("related")
             related.attach(MIMEText(config.html_body, "html", config.character_set))
-            attach_inline_file(
-                related,
-                config.inline_attachment_file,
-                config.character_set,
-                config.content_id,
-            )
+            for path, content_id in zip(config.inline_attachment_files, config.content_ids):
+                attach_inline_file(
+                    related,
+                    path,
+                    config.character_set,
+                    content_id,
+                )
             msg.attach(related)
         elif has_html:
             msg = MIMEMultipart("alternative")
