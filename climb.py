@@ -5,14 +5,15 @@ climb - Command Line Interface Mail Bot V1.1 by Michael Boehm, Cephei AG
 Utility to send automated E-Mails with full encryption support - Freeware
 """
 
-import os
-import sys
-import shlex
-import mimetypes
-import time
+import base64
 import imaplib
+import mimetypes
+import os
+import shlex
 import smtplib
 import ssl as sslmod
+import sys
+import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from email import encoders
@@ -34,6 +35,7 @@ DEFAULT_PORT_NOCRYPT = 25
 DEFAULT_TIMEOUT = 60
 MAX_ATTACHMENT_SIZE = 50 * 1024 * 1024  # 50 MB
 VERSION = "1.3"
+FROM_NAME_CHARSET = "utf-8"
 
 
 @dataclass
@@ -493,6 +495,56 @@ def validate_email(addr: str) -> bool:
     return True
 
 
+def encode_display_name_utf8(display_name: str) -> str:
+    """Encode display name using RFC 2047 UTF-8 Base64 encoding."""
+    encoded = base64.b64encode(display_name.encode("utf-8")).decode("ascii")
+    return f"=?{FROM_NAME_CHARSET}?b?{encoded}?="
+
+
+def is_ascii_only(value: str) -> bool:
+    """Return True if value contains only ASCII characters."""
+    try:
+        value.encode("ascii")
+        return True
+    except UnicodeEncodeError:
+        return False
+
+
+def format_sender_header(sender: str) -> str:
+    """Format sender header with RFC 2047 encoded display name if angle addr is used."""
+    if not sender:
+        return sender
+
+    lt = sender.find("<")
+    if lt == -1:
+        return sender.strip()
+
+    gt = sender.find(">", lt + 1)
+    if gt == -1:
+        return sender.strip()
+
+    display_raw = sender[:lt].strip()
+    addr = sender[lt + 1:gt].strip()
+
+    if not display_raw or not addr:
+        return sender.strip()
+
+    if display_raw.startswith("\"") and display_raw.endswith("\"") and len(display_raw) >= 2:
+        display_raw = display_raw[1:-1].strip()
+
+    display_raw = display_raw.strip()
+    if display_raw.startswith("=?") and display_raw.endswith("?="):
+        display_value = display_raw
+    elif is_ascii_only(display_raw):
+        display_value = display_raw
+    else:
+        display_value = encode_display_name_utf8(display_raw)
+
+    display_value = display_value.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    return f"\"{display_value}\" <{addr}>"
+
+
 def validate_email_list(addrs: List[str], field_name: str) -> None:
     """Validate a list of email addresses. Exits with error if any are invalid."""
     for addr in addrs:
@@ -557,10 +609,10 @@ def create_email_message(config: MailConfig) -> Tuple[MIMEBase, List[str]]:
     msg["Date"] = format_datetime(datetime.now(timezone.utc).astimezone())
     msg["Message-ID"] = make_msgid()
     msg["Subject"] = Header(config.mail_subject, config.character_set)
-    msg["From"] = config.sender_email
+    msg["From"] = format_sender_header(config.sender_email)
     
     if config.receipt:
-        msg["Disposition-Notification-To"] = config.sender_email
+        msg["Disposition-Notification-To"] = msg["From"]
     
     # Process recipients
     recipients_list = split_addrs(config.recipients_emails)
@@ -736,7 +788,8 @@ def send_smtp(config: MailConfig, msg: MIMEBase, recipients: List[str]) -> bool:
             server.sock.settimeout(config.timeout)
         
         server.login(config.login, config.password)
-        server.sendmail(msg["From"], recipients, msg.as_string())
+        envelope_from = parseaddr(msg["From"])[1] or config.sender_email
+        server.sendmail(envelope_from, recipients, msg.as_string())
         return True
         
     except (smtplib.SMTPException, OSError, ValueError) as exc:

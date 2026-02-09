@@ -72,6 +72,28 @@ climb.py -s smtp.example.com -u user@example.com -pw - \
 | `-of` | `-optionsF` | File to read options from (CLI options higher prio!) |
 | `-h` | `-help` | Show help |
 
+## From header formatting
+
+If you pass a display name together with an address using angle brackets, `climb`
+normalizes it for you:
+
+- Ensures the display name is quoted (helpful for CLI/options file usage).
+- If the display name contains non-ASCII characters, it is RFC 2047 encoded as
+  UTF-8 Base64.
+- Ensures exactly one space between the quoted name and the `<address>`.
+
+Example:
+
+```
+"Michael Böhm <mboehm@cephei.com>"
+```
+
+is sent as:
+
+```
+"=?utf-8?b?TWljaGFlbCBCw7ZobQ==?=" <mboehm@cephei.com>
+```
+
 ## Password Handling
 
 For security, avoid passing passwords directly on the command line. Use one of these methods:
