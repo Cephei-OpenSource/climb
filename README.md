@@ -85,13 +85,13 @@ normalizes it for you:
 Example:
 
 ```
-"Michael Böhm <mboehm@cephei.com>"
+"Jürgen Müller <mail@example.com>"
 ```
 
 is sent as:
 
 ```
-"=?utf-8?b?TWljaGFlbCBCw7ZobQ==?=" <mboehm@cephei.com>
+"=?utf-8?b?SsO8cmdlbiBNw7xsbGVy?=" <mail@example.com>
 ```
 
 ## Password Handling
